@@ -90,7 +90,7 @@ module poly::cross_chain_utils {
         while (index < sigCount) {
             sig = secp256k1::ecdsa_signature_from_bytes(putil::slice<u8>(sigList, index*POLYCHAIN_SIGNATURE_LEN, APTOS_SIGNATURE_LEN));
             recovery_id = *vector::borrow<u8>(sigList, index*POLYCHAIN_SIGNATURE_LEN + APTOS_SIGNATURE_LEN);
-            let signer_opt = secp256k1::ecdsa_recover(hash::sha2_256(headerHash), recovery_id, &sig)
+            let signer_opt = secp256k1::ecdsa_recover(hash::sha2_256(headerHash), recovery_id, &sig);
             if (option::is_none(&signer_opt)) {
                 return false
             };

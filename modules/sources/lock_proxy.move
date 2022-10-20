@@ -244,6 +244,14 @@ module poly_bridge::lock_proxy {
         });
     }
 
+    public fun is_treasury_initialzed<CoinType>(): bool {
+        exists<Treasury<CoinType>>(@poly_bridge)
+    }
+
+    public fun is_admin(account: address): bool {
+        account == @poly_bridge
+    }
+
     public fun deposit<CoinType>(fund: Coin<CoinType>) acquires Treasury {
         assert!(exists<Treasury<CoinType>>(@poly_bridge), ETREASURY_NOT_EXIST);
         let treasury_ref = borrow_global_mut<Treasury<CoinType>>(@poly_bridge);

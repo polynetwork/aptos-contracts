@@ -16,7 +16,6 @@ subdir = 'aptos-move/framework/aptos-stdlib'
 [addresses]
 std = "0x1"
 aptos_std = "0x1"
-aptos_token = "0x1"
 aptos_framework = "0x1"
 poly = "0x4a98355a0d56b8be0b8c95c85c522cff292916a716907e36a874b31c73b32eb3"
 poly_bridge = "0x4a98355a0d56b8be0b8c95c85c522cff292916a716907e36a874b31c73b32eb3"

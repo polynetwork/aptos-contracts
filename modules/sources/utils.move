@@ -71,4 +71,12 @@ module poly::utils {
             abort EUNSUPPORT_GENERIC_TYPE
         }
     }
+
+    #[test]
+    fun slice_test() {
+        let a = vector[0,1,2,3,4,5,6,7,8,9];
+        assert!(slice(&a, 3, 1) == vector[3], 0);
+        assert!(slice(&a, 5, 4) == vector[5, 6, 7, 8], 0);
+        assert!(slice(&a, 8, 2) == vector[8, 9], 0);
+    }
 }

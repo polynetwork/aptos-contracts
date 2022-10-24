@@ -27,6 +27,7 @@ module poly::cross_chain_manager {
     const ENOT_CHANGE_KEEPER_ROLE: u64 = 12;
     const EBLACKLISTED_FROM: u64 = 13;
     const EBLACKLISTED_TO: u64 = 14;
+    const EVERIFIER_NOT_RECEIVER: u64 = 15;
 
 
     // access control
@@ -95,6 +96,10 @@ module poly::cross_chain_manager {
         let res = zero_copy_sink::write_var_bytes(&bcs::to_bytes(&license.account));
         vector::append(&mut res, zero_copy_sink::write_var_bytes(&license.module_name));
         return res
+    }
+
+    public fun getLicenseInfo(license: &License): (address, vector<u8>) {
+        (license.account, license.module_name)
     }
 
 
@@ -174,14 +179,19 @@ module poly::cross_chain_manager {
         fromChainTxExist: Table<u64, Table<vector<u8>, bool>>,
     }
 
-    fun getPolyId(): u64 acquires CrossChainGlobalConfig {
+    fun putPolyId(polyId: u64) acquires CrossChainGlobalConfig {
+        let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
+        config_ref.polyId = polyId;
+    }
+
+    public fun getPolyId(): u64 acquires CrossChainGlobalConfig {
         let config_ref = borrow_global<CrossChainGlobalConfig>(@poly);
         return config_ref.polyId
     }
 
     fun putCurEpochStartHeight(height: u64) acquires CrossChainGlobalConfig {
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
-        *&mut config_ref.curEpochStartHeight = height;
+        config_ref.curEpochStartHeight = height;
     }
 
     public fun getCurEpochStartHeight(): u64 acquires CrossChainGlobalConfig {
@@ -191,7 +201,7 @@ module poly::cross_chain_manager {
 
     fun putCurBookKeepers(keepers: &vector<vector<u8>>) acquires CrossChainGlobalConfig {
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
-        *&mut config_ref.curBookKeepers = *keepers;
+        config_ref.curBookKeepers = *keepers;
     }
 
     public fun getCurBookKeepers(): vector<vector<u8>> acquires CrossChainGlobalConfig {
@@ -231,7 +241,7 @@ module poly::cross_chain_manager {
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
         let index = config_ref.ethToPolyTxHashIndex;
         table::upsert(&mut config_ref.ethToPolyTxHashMap, index, *hash);
-        *&mut config_ref.ethToPolyTxHashIndex = index + 1;
+        config_ref.ethToPolyTxHashIndex = index + 1;
     }
 
     public fun getEthTxHash(ethHashIndex: u128): vector<u8> acquires CrossChainGlobalConfig {
@@ -249,13 +259,13 @@ module poly::cross_chain_manager {
     public fun pause(account: &signer) acquires CrossChainGlobalConfig, ACLStore {
         assert!(hasRole(PAUSE_ROLE, signer::address_of(account)), ENOT_PAUSE_ROLE);
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
-        *&mut config_ref.paused = true;
+        config_ref.paused = true;
     }
 
     public fun unpause(account: &signer) acquires CrossChainGlobalConfig, ACLStore {
         assert!(hasRole(PAUSE_ROLE, signer::address_of(account)), ENOT_PAUSE_ROLE);
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
-        *&mut config_ref.paused = false;
+        config_ref.paused = false;
     }
 
 
@@ -310,6 +320,13 @@ module poly::cross_chain_manager {
                 keepers: keepers,
             },
         );
+    }
+
+    
+    // set poly id
+    public entry fun setPolyId(account: &signer, polyId: u64) acquires CrossChainGlobalConfig, ACLStore {
+        assert!(hasRole(CHANGE_KEEPER_ROLE, signer::address_of(account)), ENOT_CHANGE_KEEPER_ROLE);
+        putPolyId(polyId);
     }
 
 
@@ -401,7 +418,7 @@ module poly::cross_chain_manager {
 
 
     // verify header and execute tx
-    public fun verifyHeaderAndExecuteTx(proof: &vector<u8>, rawHeader: &vector<u8>, headerProof: &vector<u8>, curRawHeader: &vector<u8>, headerSig: &vector<u8>): Certificate acquires CrossChainGlobalConfig, ACLStore, EventStore {
+    public fun verifyHeaderAndExecuteTx(license: &License, proof: &vector<u8>, rawHeader: &vector<u8>, headerProof: &vector<u8>, curRawHeader: &vector<u8>, headerSig: &vector<u8>): Certificate acquires CrossChainGlobalConfig, ACLStore, EventStore {
         assert!(!paused(), EPAUSED);
 
         let (
@@ -465,6 +482,10 @@ module poly::cross_chain_manager {
         // check to chain id
         assert!(to_chain_id == getPolyId(), ENOT_TARGET_CHAIN);
 
+        // check verifier
+        let msg_sender = getLicenseId(license);
+        assert!(msg_sender == to_contract, EVERIFIER_NOT_RECEIVER);
+
         // check black list
         assert!(!isBlackListedTo(to_contract), EBLACKLISTED_TO);
 
@@ -488,5 +509,84 @@ module poly::cross_chain_manager {
             method: method,
             args: args
         }
+    }
+
+
+    #[test_only] 
+    fun test_setup(arg: &signer) acquires EventStore {
+        0x1::aptos_account::create_account(@poly);
+        let keepers = vector[
+            x"2bed55e8c4d9cbc50657ff5909ee51dc394a92aad911c36bace83c4d63540794bc68a65f1a54ec4f14a630043090bc29ee9cddf90f3ecb86e0973ffff3fd4899",
+            x"09c6475ce07577ab72a1f96c263e5030cb53a843b00ca1238a093d9dcb183e2fec837e621b7ec6db7658c9b9808da304aed599043de1b433d490ff74f577c53d",
+            x"e68a6e54bdfa0af47bd18465f4352f5151dc729c61a7399909f1cd1c6d816c0241800e782bb05f6f803b9f958930ebcee0b67d3af27845b4fbfa09e926cf17ae",
+            x"29e0d1c5b2ae838930ae1ad861ddd3d0745d1c7f142492cabd02b291d2c95c1dda6633dc7be5dd4f9597f32f1e45721959d0902a8e56a58b2db79ada7c3ce932",
+        ];
+        init(arg, keepers, 0, 1);
+    }
+
+    #[test(arg = @poly)]
+    fun pause_test(arg: signer) acquires CrossChainGlobalConfig, EventStore, ACLStore {
+        test_setup(&arg);
+        assert!(!paused(), 0);
+        pause(&arg);
+        assert!(paused(), 0);
+        unpause(&arg);
+        assert!(!paused(), 0);
+    }
+
+    #[test(arg = @poly, invalid_signer = @0x2), expected_failure(abort_code = 10)]
+    fun pause_failure_test(arg: signer, invalid_signer: signer) acquires CrossChainGlobalConfig, EventStore, ACLStore {
+        test_setup(&arg);
+        let addr = signer::address_of(&invalid_signer);
+        0x1::aptos_account::create_account(addr);
+        assert!(!paused(), 0);
+        pause(&invalid_signer);
+    }
+
+    #[test(arg = @poly)]
+    fun role_test(arg: signer) acquires EventStore, ACLStore  {
+        test_setup(&arg);
+
+        let role = 9u64;
+        assert!(!hasRole(role, @0x2), 0);
+        grantRole(&arg, role, @0x2);
+        assert!(hasRole(role, @0x2), 0);
+        revokeRole(&arg, role, @0x2);
+        assert!(!hasRole(role, @0x2), 0);
+    }
+
+    #[test(arg = @poly)]
+    fun license_test(arg: signer) acquires EventStore, ACLStore  {
+        test_setup(&arg);
+
+        let mod = x"9923848873";
+        let license = issueLicense(&arg, @0x2, mod);
+        let license_id = getLicenseId(&license);
+        assert!(!isBlackListedFrom(license_id), 0);
+        assert!(!isBlackListedTo(license_id), 0);
+
+        setBlackList(&arg, license_id, 1);
+        assert!(!isBlackListedFrom(license_id), 0);
+        assert!(isBlackListedTo(license_id), 0);
+
+        setBlackList(&arg, license_id, 2);
+        assert!(isBlackListedFrom(license_id), 0);
+        assert!(!isBlackListedTo(license_id), 0);
+
+        setBlackList(&arg, license_id, 3);
+        assert!(isBlackListedFrom(license_id), 0);
+        assert!(isBlackListedTo(license_id), 0);
+        destroyLicense(license);
+    }
+
+    #[test(arg = @poly)]
+    fun mark_tx_exist_test(arg: signer) acquires CrossChainGlobalConfig, EventStore {
+        test_setup(&arg);
+
+        let chain = 10u64;
+        let tx = x"93ab9323";
+        assert!(!checkIfFromChainTxExist(chain, &tx), 0);
+        markFromChainTxExist(chain, &tx);
+        assert!(checkIfFromChainTxExist(chain, &tx), 0);
     }
 }

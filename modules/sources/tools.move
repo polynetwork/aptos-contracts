@@ -5,9 +5,16 @@ module poly::tools {
 
     use std::vector;
     use std::signer;
-    use aptos_framework::coin;
 
-    public entry fun init_as_mainnet(account: signer) {
+    // mainnet
+    public entry fun init_as_mainnet(account: &signer) {
+        init_mainnet_ccm(account);
+        wrapper_v1::init(account);
+        lock_proxy::init(account);
+        issue_license_to_lock_proxy(account, signer::address_of(account));
+    }
+
+    public entry fun init_mainnet_ccm(account: &signer) {
         let polyId: u64 = 41;
         let startHeight: u64 = 0;
         let keepers: vector<vector<u8>> = vector::empty<vector<u8>>();
@@ -15,14 +22,23 @@ module poly::tools {
         vector::push_back(&mut keepers, x"09c6475ce07577ab72a1f96c263e5030cb53a843b00ca1238a093d9dcb183e2fec837e621b7ec6db7658c9b9808da304aed599043de1b433d490ff74f577c53d");
         vector::push_back(&mut keepers, x"e68a6e54bdfa0af47bd18465f4352f5151dc729c61a7399909f1cd1c6d816c0241800e782bb05f6f803b9f958930ebcee0b67d3af27845b4fbfa09e926cf17ae");
         vector::push_back(&mut keepers, x"29e0d1c5b2ae838930ae1ad861ddd3d0745d1c7f142492cabd02b291d2c95c1dda6633dc7be5dd4f9597f32f1e45721959d0902a8e56a58b2db79ada7c3ce932");
-        wrapper_v1::init(&account);
-        lock_proxy::init(&account);
-        cross_chain_manager::init(&account, keepers, startHeight, polyId);
-        let license = cross_chain_manager::issueLicense(&account, signer::address_of(&account), b"lock_proxy");
-        lock_proxy::initLicense(&account, license);
+        cross_chain_manager::init(account, keepers, startHeight, polyId);
     }
 
-    public entry fun init_as_testnet(account: signer) {
+    public entry fun issue_license_to_lock_proxy(account: &signer, bridge_addr: address) {
+        let license = cross_chain_manager::issueLicense(account, bridge_addr, b"lock_proxy");
+        lock_proxy::receiveLicense(license);
+    }
+
+    // testnet
+    public entry fun init_as_testnet(account: &signer) {
+        init_testnet_ccm(account);
+        wrapper_v1::init(account);
+        lock_proxy::init(account);
+        issue_license_to_lock_proxy(account, signer::address_of(account));
+    }
+
+    public entry fun init_testnet_ccm(account: &signer) {
         let polyId: u64 = 998;
         let startHeight: u64 = 0;
         let keepers: vector<vector<u8>> = vector::empty<vector<u8>>();
@@ -33,34 +49,6 @@ module poly::tools {
         vector::push_back(&mut keepers, x"a4f44dd65cbcc52b1d1ac51747378a7f84753b5f7bf2760ca21390ced6b172bbf4d03e2cf4e0e79e46f7a757058d240e542853341e88feb1610ff03ba785cfc1");
         vector::push_back(&mut keepers, x"d0d0e883c73d8256cf4314822ddd973c0179b73d8ed3df85aad38d36a8b2b0c7696f0c66330d243b1bc7bc8d05e694b4d642ac68f741d2b7f6ea4037ef46b992");
         vector::push_back(&mut keepers, x"ef44beba84422bd76a599531c9fe50969a929a0fee35df66690f370ce19fa8c00ed4b649691d116b7deeb79b714156d18981916e58ae40c0ebacbf3bd0b87877");
-        wrapper_v1::init(&account);
-        lock_proxy::init(&account);
-        cross_chain_manager::init(&account, keepers, startHeight, polyId);
-        let license = cross_chain_manager::issueLicense(&account, signer::address_of(&account), b"lock_proxy");
-        lock_proxy::initLicense(&account, license);
+        cross_chain_manager::init(account, keepers, startHeight, polyId);
     }
-
-    public entry fun bind_proxy(owner: &signer, to_chain_id: u64, target_proxy_hash: vector<u8>) {
-        lock_proxy::bindProxy(owner, to_chain_id, &target_proxy_hash);
-    }
-
-    public entry fun unbind_proxy(owner: &signer, to_chain_id: u64) {
-        lock_proxy::unbindProxy(owner, to_chain_id);
-    }
-
-    public entry fun bind_asset<CoinType>(owner: &signer, to_chain_id: u64, to_asset_hash: vector<u8>) {
-        if (!lock_proxy::is_treasury_initialzed<CoinType>() && lock_proxy::is_admin(signer::address_of(owner))) {
-            lock_proxy::initTreasury<CoinType>(owner);
-        };
-        lock_proxy::bindAsset<CoinType>(owner, to_chain_id, &to_asset_hash);
-    }
-
-    public entry fun unbind_asset<CoinType>(owner: &signer, to_chain_id: u64) {
-        lock_proxy::unbindAsset<CoinType>(owner, to_chain_id);
-    }
-
-    public entry fun register_coin<CoinType>(account: &signer) {
-        coin::register<CoinType>(account);
-    }
-
 }

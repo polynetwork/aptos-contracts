@@ -1,13 +1,11 @@
 module poly_bridge::wrapper_v1 {
     use std::signer;
-    use std::string::{String};
     use aptos_std::event;
     use aptos_std::type_info::{TypeInfo, Self};
     use aptos_framework::account;
     use aptos_framework::coin::{Coin, Self}; 
     use aptos_framework::aptos_coin::AptosCoin;
 
-    use poly::cross_chain_manager;
     use poly_bridge::lock_proxy;
 
     const DEPRECATED: u64 = 1;
@@ -39,7 +37,7 @@ module poly_bridge::wrapper_v1 {
     public entry fun setFeeCollector(admin: &signer, new_fee_collector: address) acquires WrapperStore {
         assert!(signer::address_of(admin) == @poly_bridge, EINVALID_SIGNER);
         let config_ref = borrow_global_mut<WrapperStore>(@poly_bridge);
-        *&mut config_ref.fee_collector = new_fee_collector;
+        config_ref.fee_collector = new_fee_collector;
     }
 
     public fun feeCollector(): address acquires WrapperStore {
@@ -48,15 +46,14 @@ module poly_bridge::wrapper_v1 {
     }
     
     // for relayer 
-    public entry fun realy_unlock_tx<CoinType>(
+    public entry fun relay_unlock_tx<CoinType>(
         proof: vector<u8>, 
         rawHeader: vector<u8>, 
         headerProof: vector<u8>, 
         curRawHeader: vector<u8>, 
         headerSig: vector<u8>
     ) {
-        let certificate = cross_chain_manager::verifyHeaderAndExecuteTx(&proof, &rawHeader, &headerProof, &curRawHeader, &headerSig);
-        lock_proxy::unlock<CoinType>(certificate);
+        lock_proxy::relay_unlock_tx<CoinType>(proof, rawHeader, headerProof, curRawHeader, headerSig);
     }
 
     // for user
@@ -70,16 +67,6 @@ module poly_bridge::wrapper_v1 {
         let fund = coin::withdraw<CoinType>(account, amount);
         let fee = coin::withdraw<AptosCoin>(account, fee_amount);
         lock_and_pay_fee_with_fund<CoinType>(account, fund, fee, toChainId, &toAddress);
-    }
-
-    public entry fun lock_and_pay_fee_v2<CoinType>(
-        _account: &signer, 
-        _amount: u64, 
-        _fee_amount: u64,
-        _toChainId: u64, 
-        _toAddress: String
-    ) {
-        abort DEPRECATED
     }
 
     public fun lock_and_pay_fee_with_fund<CoinType>(

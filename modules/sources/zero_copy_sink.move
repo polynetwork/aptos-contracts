@@ -47,4 +47,32 @@ module poly::zero_copy_sink {
             return res
         }
     }
+
+    #[test_only]
+    use poly::zero_copy_source as source;
+
+    #[test]
+    fun sink_test() {
+        let (v_bool, offset) = source::next_bool(&write_bool(true), 0);
+        assert!(v_bool == true, 0);
+        assert!(offset == 1, 0);
+        let (v_u8, offset) = source::next_u8(&write_u8(255), 0);
+        assert!(v_u8 == 255, 0);
+        assert!(offset == 1, 0);
+        let (v_u64, offset) = source::next_u64(&write_u64(2127648943590824778u64), 0);
+        assert!(v_u64 == 2127648943590824778u64, 0);
+        assert!(offset == 8, 0);
+        let (v_u256_h, v_u256_l, offset) = source::next_u256(&write_u256(2127648943590824778798723478234u128, 849583948593845703094853094853u128), 0);
+        assert!(v_u256_h == 2127648943590824778798723478234u128, 0);
+        assert!(v_u256_l == 849583948593845703094853094853u128, 0);
+        assert!(offset == 32, 0);
+        
+        let (v_bytes, offset) = source::next_var_bytes(&write_var_bytes(&x"32342a23b423b4d2342349c8084e09852f34"), 0);
+        assert!(v_bytes == x"32342a23b423b4d2342349c8084e09852f34", 0);
+        assert!(offset == 18 + 1, 0);
+
+        (v_bytes, offset) = source::next_var_bytes(&write_var_bytes(&x"3f"), 0);
+        assert!(v_bytes == x"3f", 0);
+        assert!(offset == 2, 0);
+    }
 }

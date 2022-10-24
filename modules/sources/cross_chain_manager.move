@@ -27,6 +27,7 @@ module poly::cross_chain_manager {
     const ENOT_CHANGE_KEEPER_ROLE: u64 = 12;
     const EBLACKLISTED_FROM: u64 = 13;
     const EBLACKLISTED_TO: u64 = 14;
+    const EVERIFIER_NOT_RECEIVER: u64 = 15;
 
 
     // access control
@@ -95,6 +96,10 @@ module poly::cross_chain_manager {
         let res = zero_copy_sink::write_var_bytes(&bcs::to_bytes(&license.account));
         vector::append(&mut res, zero_copy_sink::write_var_bytes(&license.module_name));
         return res
+    }
+
+    public fun getLicenseInfo(license: &License): (address, vector<u8>) {
+        (license.account, license.module_name)
     }
 
 
@@ -174,14 +179,19 @@ module poly::cross_chain_manager {
         fromChainTxExist: Table<u64, Table<vector<u8>, bool>>,
     }
 
-    fun getPolyId(): u64 acquires CrossChainGlobalConfig {
+    fun putPolyId(polyId: u64) acquires CrossChainGlobalConfig {
+        let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
+        config_ref.polyId = polyId;
+    }
+
+    public fun getPolyId(): u64 acquires CrossChainGlobalConfig {
         let config_ref = borrow_global<CrossChainGlobalConfig>(@poly);
         return config_ref.polyId
     }
 
     fun putCurEpochStartHeight(height: u64) acquires CrossChainGlobalConfig {
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
-        *&mut config_ref.curEpochStartHeight = height;
+        config_ref.curEpochStartHeight = height;
     }
 
     public fun getCurEpochStartHeight(): u64 acquires CrossChainGlobalConfig {
@@ -191,7 +201,7 @@ module poly::cross_chain_manager {
 
     fun putCurBookKeepers(keepers: &vector<vector<u8>>) acquires CrossChainGlobalConfig {
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
-        *&mut config_ref.curBookKeepers = *keepers;
+        config_ref.curBookKeepers = *keepers;
     }
 
     public fun getCurBookKeepers(): vector<vector<u8>> acquires CrossChainGlobalConfig {
@@ -231,7 +241,7 @@ module poly::cross_chain_manager {
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
         let index = config_ref.ethToPolyTxHashIndex;
         table::upsert(&mut config_ref.ethToPolyTxHashMap, index, *hash);
-        *&mut config_ref.ethToPolyTxHashIndex = index + 1;
+        config_ref.ethToPolyTxHashIndex = index + 1;
     }
 
     public fun getEthTxHash(ethHashIndex: u128): vector<u8> acquires CrossChainGlobalConfig {
@@ -249,13 +259,13 @@ module poly::cross_chain_manager {
     public fun pause(account: &signer) acquires CrossChainGlobalConfig, ACLStore {
         assert!(hasRole(PAUSE_ROLE, signer::address_of(account)), ENOT_PAUSE_ROLE);
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
-        *&mut config_ref.paused = true;
+        config_ref.paused = true;
     }
 
     public fun unpause(account: &signer) acquires CrossChainGlobalConfig, ACLStore {
         assert!(hasRole(PAUSE_ROLE, signer::address_of(account)), ENOT_PAUSE_ROLE);
         let config_ref = borrow_global_mut<CrossChainGlobalConfig>(@poly);
-        *&mut config_ref.paused = false;
+        config_ref.paused = false;
     }
 
 
@@ -310,6 +320,13 @@ module poly::cross_chain_manager {
                 keepers: keepers,
             },
         );
+    }
+
+    
+    // set poly id
+    public entry fun setPolyId(account: &signer, polyId: u64) acquires CrossChainGlobalConfig, ACLStore {
+        assert!(hasRole(CHANGE_KEEPER_ROLE, signer::address_of(account)), ENOT_CHANGE_KEEPER_ROLE);
+        putPolyId(polyId);
     }
 
 
@@ -401,7 +418,7 @@ module poly::cross_chain_manager {
 
 
     // verify header and execute tx
-    public fun verifyHeaderAndExecuteTx(proof: &vector<u8>, rawHeader: &vector<u8>, headerProof: &vector<u8>, curRawHeader: &vector<u8>, headerSig: &vector<u8>): Certificate acquires CrossChainGlobalConfig, ACLStore, EventStore {
+    public fun verifyHeaderAndExecuteTx(license: &License, proof: &vector<u8>, rawHeader: &vector<u8>, headerProof: &vector<u8>, curRawHeader: &vector<u8>, headerSig: &vector<u8>): Certificate acquires CrossChainGlobalConfig, ACLStore, EventStore {
         assert!(!paused(), EPAUSED);
 
         let (
@@ -464,6 +481,10 @@ module poly::cross_chain_manager {
 
         // check to chain id
         assert!(to_chain_id == getPolyId(), ENOT_TARGET_CHAIN);
+
+        // check verifier
+        let msg_sender = getLicenseId(license);
+        assert!(msg_sender == to_contract, EVERIFIER_NOT_RECEIVER);
 
         // check black list
         assert!(!isBlackListedTo(to_contract), EBLACKLISTED_TO);
